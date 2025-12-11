@@ -351,7 +351,8 @@ void meshMasking(const mvsUtils::MultiViewParams& mp,
                  const bool invert,
                  const bool smoothBoundary,
                  const bool undistortMasks,
-                 const bool usePointsVisibilities)
+                 const bool usePointsVisibilities,
+                 const int mtlId = 1)
 {
     MaskCache maskCache(mp, masksFolders, undistortMasks, maskExtension);
 
@@ -434,7 +435,7 @@ void meshMasking(const mvsUtils::MultiViewParams& mp,
 
     // filter masked vertex (remove adjacent triangles)
     ALICEVISION_LOG_INFO("Filter triangles");
-    mesh::Mesh filteredMesh;
+    mesh::Mesh filteredMesh = inputMesh; // stub
     StaticVector<int> inputPtIdToFilteredPtId;
 
     {
@@ -451,11 +452,11 @@ void meshMasking(const mvsUtils::MultiViewParams& mp,
                                                 : std::all_of(std::begin(triangle.v), std::end(triangle.v), isVertexVisible);
             if (visible)
             {
-                visibleTriangles.push_back(triangleId);
+                filteredMesh->trisMtlIds()[triangleId] = mtlId;
             }
         }
 
-        inputMesh.generateMeshFromTrianglesSubset(visibleTriangles, filteredMesh, inputPtIdToFilteredPtId);
+        //inputMesh.generateMeshFromTrianglesSubset(visibleTriangles, filteredMesh, inputPtIdToFilteredPtId);
     }
 
     if (smoothBoundary)
@@ -503,6 +504,7 @@ int main(int argc, char** argv)
     std::string outputMeshPath;
 
     int threshold = 1;
+    int mtlId = 1;
     bool invert = false;
     bool smoothBoundary = false;
     bool undistortMasks = false;
@@ -522,7 +524,9 @@ int main(int argc, char** argv)
         ("outputMesh,o", po::value<std::string>(&outputMeshPath)->required(),
          "Output mesh.")
         ("threshold", po::value<int>(&threshold)->default_value(threshold)->notifier(optInRange(1, INT_MAX, "threshold"))->required(),
-         "The minimum number of visibility to keep a vertex.");
+         "The minimum number of visibility to keep a vertex.")
+        ("material", po::value<int>(&mtlId)->default_value(mtlId)->notifier(optInRange(0, INT_MAX, "material"))->required(),
+         "material id");
 
     po::options_description optionalParams("Optional parameters");
     optionalParams.add_options()
@@ -610,7 +614,7 @@ int main(int argc, char** argv)
     }
 
     ALICEVISION_LOG_INFO("Mask mesh");
-    meshMasking(mp, inputMesh, masksFolders, maskExtension, outputMeshPath, threshold, invert, smoothBoundary, undistortMasks, usePointsVisibilities);
+    meshMasking(mp, inputMesh, masksFolders, maskExtension, outputMeshPath, threshold, invert, smoothBoundary, undistortMasks, usePointsVisibilities, mtlId);
     ALICEVISION_LOG_INFO("Task done in (s): " + std::to_string(timer.elapsed()));
     return EXIT_SUCCESS;
 }

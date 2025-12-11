@@ -55,6 +55,12 @@ class MeshMasking(desc.AVCommandLineNode):
             value=1,
             range=(1, 100, 1),
         ),
+        desc.IntParam(
+            name="material",
+            label="Material",
+            description="material id",
+            value=1,
+        ),
         desc.BoolParam(
             name="smoothBoundary",
             label="Smooth Boundary",
