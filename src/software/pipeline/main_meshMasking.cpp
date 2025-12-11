@@ -452,7 +452,7 @@ void meshMasking(const mvsUtils::MultiViewParams& mp,
                                                 : std::all_of(std::begin(triangle.v), std::end(triangle.v), isVertexVisible);
             if (visible)
             {
-                filteredMesh->trisMtlIds()[triangleId] = mtlId;
+                filteredMesh.trisMtlIds()[triangleId] = mtlId;
             }
         }
 
