@@ -284,6 +284,13 @@ jobs:
           cmakeBuildType: Release
           buildWithCMake: true
 
+      - name: Archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: alicevision_windows
+          path: |
+            ${{ env.ALICEVISION_LIBPATH }}
+
       - name: Python Binding - Unit Tests
         run: |
           python -m pytest ./pyTests
@@ -300,10 +307,3 @@ jobs:
           cmakeBuildType: Release
           useVcpkgToolchainFile: true
           buildWithCMake: true
-
-      - name: Archive artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: alicevision_windows
-          path: |
-            build/bin/Release
