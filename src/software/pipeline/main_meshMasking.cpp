@@ -347,20 +347,24 @@ void meshMasking(const mvsUtils::MultiViewParams& mp,
                  const std::vector<std::string>& masksFolders,
                  const std::string& maskExtension,
                  const std::string& outputMeshPath,
-                 const int threshold,
+                 const float threshold,
                  const bool invert,
                  const bool smoothBoundary,
                  const bool undistortMasks,
                  const bool usePointsVisibilities,
-                 const int mtlId = 1)
+                 const int borderX = 1000,
+                 const int borderY = 1000)
 {
     MaskCache maskCache(mp, masksFolders, undistortMasks, maskExtension);
 
     // compute visibility for every vertex
     // also update inputMesh.pointsVisibilities according to the masks
     ALICEVISION_LOG_INFO("Compute vertex visibilities");
-    StaticVector<int> vertexVisibilityCounters;
+    StaticVector<int> vertexVisibilityCounters, vertexOriginalVisibilityCounters;
+
     vertexVisibilityCounters.resize_with(inputMesh.pts.size(), 0);
+    vertexOriginalVisibilityCounters.resize_with(inputMesh.pts.size(), 0);
+
     for (int camId = 0; camId < mp.getNbCameras(); ++camId)
     {
         auto* maskPtr = maskCache.lock(camId);
@@ -401,7 +405,7 @@ void meshMasking(const mvsUtils::MultiViewParams& mp,
             // project vertex on mask
             Pixel projectedPixel;
             mp.getPixelFor3DPoint(&projectedPixel, vertex, camId);
-            if (projectedPixel.x < 0 || projectedPixel.x >= mask.width() || projectedPixel.y < 0 || projectedPixel.y >= mask.height())
+            if (projectedPixel.x < borderX || projectedPixel.x >= mask.width() - borderX || projectedPixel.y < borderY || projectedPixel.y >= mask.height() - borderY)
             {
                 if (usePointsVisibilities)
                 {
@@ -410,6 +414,7 @@ void meshMasking(const mvsUtils::MultiViewParams& mp,
                 continue;
             }
 
+            ++vertexOriginalVisibilityCounters[vertexId];
             // get the mask value
             const bool maskValue = (mask(projectedPixel.y, projectedPixel.x) == 0);
             const bool masked = invert ? !maskValue : maskValue;
@@ -435,12 +440,12 @@ void meshMasking(const mvsUtils::MultiViewParams& mp,
 
     // filter masked vertex (remove adjacent triangles)
     ALICEVISION_LOG_INFO("Filter triangles");
-    mesh::Mesh filteredMesh = inputMesh; // stub
+    mesh::Mesh filteredMesh;
     StaticVector<int> inputPtIdToFilteredPtId;
 
     {
-        const auto isVertexVisible = [&vertexVisibilityCounters, threshold](const int vertexId) {
-            return vertexVisibilityCounters[vertexId] >= threshold;
+        const auto isVertexVisible = [&vertexVisibilityCounters, &vertexOriginalVisibilityCounters, threshold](const int vertexId) {
+            return vertexVisibilityCounters[vertexId] >= threshold * vertexOriginalVisibilityCounters[vertexId];
         };
 
         StaticVector<int> visibleTriangles;
@@ -452,14 +457,15 @@ void meshMasking(const mvsUtils::MultiViewParams& mp,
                                                 : std::all_of(std::begin(triangle.v), std::end(triangle.v), isVertexVisible);
             if (visible)
             {
-                filteredMesh.trisMtlIds()[triangleId] = mtlId;
+                visibleTriangles.push_back(triangleId);
             }
         }
 
-        //inputMesh.generateMeshFromTrianglesSubset(visibleTriangles, filteredMesh, inputPtIdToFilteredPtId);
+        inputMesh.generateMeshFromTrianglesSubset(visibleTriangles, filteredMesh, inputPtIdToFilteredPtId);
     }
 
-    if (smoothBoundary)
+    /*
+    if (smoothBoundary) //not implemented
     {
         ALICEVISION_LOG_INFO("Smoothen boundary triangles");
         // build visibility counters + cameraId/point visibilities for the filtered mesh
@@ -485,6 +491,7 @@ void meshMasking(const mvsUtils::MultiViewParams& mp,
 
         smoothenBoundary(filteredMesh, filteredVertexVisibilityCounters, mp, maskCache, threshold, invert);
     }
+    */
 
     // Save output mesh
     filteredMesh.save(outputMeshPath);
@@ -503,8 +510,8 @@ int main(int argc, char** argv)
     std::vector<std::string> masksFolders;
     std::string outputMeshPath;
 
-    int threshold = 1;
-    int mtlId = 1;
+    float threshold = 1.0;
+    int borderX = 1000, borderY = 1000;
     bool invert = false;
     bool smoothBoundary = false;
     bool undistortMasks = false;
@@ -523,10 +530,8 @@ int main(int argc, char** argv)
          "Filename should be the same or the image UID.")
         ("outputMesh,o", po::value<std::string>(&outputMeshPath)->required(),
          "Output mesh.")
-        ("threshold", po::value<int>(&threshold)->default_value(threshold)->notifier(optInRange(1, INT_MAX, "threshold"))->required(),
-         "The minimum number of visibility to keep a vertex.")
-        ("material", po::value<int>(&mtlId)->default_value(mtlId)->notifier(optInRange(0, INT_MAX, "material"))->required(),
-         "material id");
+        ("threshold", po::value<float>(&threshold)->default_value(threshold)->notifier(optInRange(0.0, 1.0, "threshold"))->required(),
+         "Factor of the minimum visibility to keep a vertex.");
 
     po::options_description optionalParams("Optional parameters");
     optionalParams.add_options()
@@ -539,7 +544,11 @@ int main(int argc, char** argv)
         ("usePointsVisibilities", po::value<bool>(&usePointsVisibilities)->default_value(usePointsVisibilities),
          "Use the points visibilities from the meshing to filter triangles. Example: when they are occluded, back-face, etc.")
         ("maskExtension", po::value<std::string>(&maskExtension)->default_value(maskExtension),
-         "File extension for the masks to use.");
+         "File extension for the masks to use.")
+        ("borderX", po::value<int>(&borderX)->default_value(borderX)->notifier(optInRange(0, INT_MAX, "borderX")),
+         "Border X")
+        ("borderY", po::value<int>(&borderY)->default_value(borderY)->notifier(optInRange(0, INT_MAX, "borderY")),
+         "Border Y");
     // clang-format on
 
     CmdLine cmdline("AliceVision meshMasking");
@@ -614,7 +623,7 @@ int main(int argc, char** argv)
     }
 
     ALICEVISION_LOG_INFO("Mask mesh");
-    meshMasking(mp, inputMesh, masksFolders, maskExtension, outputMeshPath, threshold, invert, smoothBoundary, undistortMasks, usePointsVisibilities, mtlId);
+    meshMasking(mp, inputMesh, masksFolders, maskExtension, outputMeshPath, threshold, invert, smoothBoundary, undistortMasks, usePointsVisibilities, borderX, borderY);
     ALICEVISION_LOG_INFO("Task done in (s): " + std::to_string(timer.elapsed()));
     return EXIT_SUCCESS;
 }

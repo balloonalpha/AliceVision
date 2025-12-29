@@ -1,4 +1,4 @@
-__version__ = "1.1"
+__version__ = "2.0"
 
 from meshroom.core import desc
 from meshroom.core.utils import VERBOSE_LEVEL
@@ -48,18 +48,24 @@ class MeshMasking(desc.AVCommandLineNode):
             value="png",
             values=["exr", "jpg", "png"],
         ),
-        desc.IntParam(
+        desc.FloatParam(
             name="threshold",
             label="Threshold",
-            description="The minimum number of visibilities to keep a vertex.",
+            description="Factor of the minimum visibility to keep a vertex.",
             value=1,
-            range=(1, 100, 1),
+            range=(0.0, 1.0, 0.01),
         ),
         desc.IntParam(
-            name="material",
-            label="Material",
-            description="material id",
-            value=1,
+            name="borderX",
+            label="Border X",
+            description="Border X",
+            value=1000,
+        ),
+        desc.IntParam(
+            name="borderY",
+            label="Border Y",
+            description="Border Y",
+            value=1000,
         ),
         desc.BoolParam(
             name="smoothBoundary",
