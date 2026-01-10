@@ -52,7 +52,7 @@ class MeshMasking(desc.AVCommandLineNode):
             name="threshold",
             label="Threshold",
             description="Factor of the minimum visibility to keep a vertex.",
-            value=1,
+            value=1.0,
             range=(0.0, 1.0, 0.01),
         ),
         desc.IntParam(
